@@ -1,0 +1,21 @@
+unique_key,created_date,agency,complaint_type,borough,status,resolution_hours,channel
+62001001,2026-07-20T08:14:00,DEP,Water System,BROOKLYN,Closed,18.4,Phone
+62001002,2026-07-20T09:05:00,DOT,Street Condition,QUEENS,Closed,31.2,Mobile
+62001003,2026-07-20T09:44:00,HPD,Heat/Hot Water,BRONX,Closed,14.0,Phone
+62001004,2026-07-20T10:21:00,NYPD,Noise - Residential,MANHATTAN,Closed,5.5,Online
+62001005,2026-07-20T11:02:00,DSNY,Dirty Conditions,BROOKLYN,Closed,22.1,Mobile
+62001006,2026-07-21T07:50:00,HPD,Heat/Hot Water,BRONX,Closed,16.8,Phone
+62001007,2026-07-21T08:33:00,DOT,Street Condition,STATEN ISLAND,Closed,42.0,Online
+62001008,2026-07-21T09:17:00,NYPD,Noise - Residential,QUEENS,Closed,7.1,Mobile
+62001009,2026-07-21T10:46:00,DEP,Water System,MANHATTAN,Closed,25.3,Phone
+62001010,2026-07-21T13:08:00,DSNY,Dirty Conditions,BRONX,Closed,19.7,Online
+62001011,2026-07-22T06:42:00,HPD,Heat/Hot Water,BROOKLYN,Closed,13.2,Phone
+62001012,2026-07-22T08:16:00,NYPD,Noise - Residential,MANHATTAN,Closed,4.8,Mobile
+62001013,2026-07-22T09:54:00,DOT,Street Condition,QUEENS,Closed,38.6,Online
+62001014,2026-07-22T11:31:00,DEP,Water System,BROOKLYN,Closed,20.9,Phone
+62001015,2026-07-22T14:05:00,DSNY,Dirty Conditions,STATEN ISLAND,Closed,28.4,Mobile
+62001016,2026-07-23T07:29:00,HPD,Heat/Hot Water,BRONX,Closed,15.1,Phone
+62001017,2026-07-23T08:48:00,NYPD,Noise - Residential,QUEENS,Closed,6.3,Online
+62001018,2026-07-23T10:12:00,DOT,Street Condition,MANHATTAN,Closed,35.7,Mobile
+62001019,2026-07-23T12:37:00,DEP,Water System,BROOKLYN,Closed,24.6,Phone
+62001020,2026-07-23T15:11:00,DSNY,Dirty Conditions,BRONX,Closed,21.8,Online

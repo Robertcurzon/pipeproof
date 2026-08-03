@@ -1,0 +1,13 @@
+unique_key,created_date,agency,complaint_type,borough,status,resolution_hours,channel
+62002001,2026-08-01T07:42:00,HPD,Heat/Hot Water,BRONX,Closed,17.2,Phone
+62002002,2026-08-01T08:03:00,HPD,Heat/Hot Water,BROOKLYN,Closed,18.9,Phone
+62002003,2026-08-01T08:25:00,HPD,Heat/Hot Water,BRONX,Closed,19.4,Phone
+62002004,2026-08-01T08:51:00,HPD,Heat/Hot Water,ATLANTIS,Closed,20.1,Online
+62002005,2026-08-01T09:16:00,NYPD,Noise - Residential,QUEENS,Closed,not_available,Mobile
+62002006,2026-08-01T09:45:00,HPD,,MANHATTAN,Closed,16.3,Phone
+62002007,2026-08-01T10:08:00,DOT,Street Condition,QUEENS,Closed,120.0,Online
+62002008,2026-08-01T10:42:00,HPD,Heat/Hot Water,BRONX,Closed,17.7,Phone
+62002008,2026-08-01T10:44:00,HPD,Heat/Hot Water,BRONX,Closed,17.8,Phone
+62002010,2026-08-01T11:20:00,HPD,Heat/Hot Water,BROOKLYN,Closed,18.2,Phone
+62002011,2026-08-01T12:01:00,HPD,Heat/Hot Water,BRONX,Closed,18.6,Phone
+62002012,2026-08-01T12:39:00,HPD,Heat/Hot Water,BRONX,Closed,19.0,Phone

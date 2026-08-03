@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="PipeProof contract-first data intake and pipeline reliability workbench.">
+    <title>PipeProof | Data Intake Reliability</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <div>
+          <p class="eyebrow">DATA INTAKE RELIABILITY</p>
+          <h1>PipeProof</h1>
+          <p class="lede">Convert changing source files into contract-validated datasets with reproducible evidence.</p>
+        </div>
+        <a class="api-link" href="/api/runs">JSON API</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="upload-band" aria-labelledby="upload-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">NEW RUN</p>
+            <h2 id="upload-title">Analyze an incoming batch</h2>
+          </div>
+          <p class="section-copy">CSV, Parquet, JSON, or JSONL. Add a baseline to measure drift; without one, PipeProof creates the initial contract.</p>
+        </div>
+        <form class="upload-form" method="post" action="/analyze" enctype="multipart/form-data" id="upload-form">
+          <label>
+            <span>Dataset name</span>
+            <input name="dataset_name" value="customer_feed" maxlength="80" required>
+          </label>
+          <label>
+            <span>Baseline batch <small>optional</small></span>
+            <input type="file" name="baseline" accept=".csv,.parquet,.json,.jsonl">
+          </label>
+          <label>
+            <span>Current batch</span>
+            <input type="file" name="current" accept=".csv,.parquet,.json,.jsonl" required>
+          </label>
+          <button type="submit" id="analyze-button">Run reliability check</button>
+        </form>
+      </section>
+
+      {% if selected %}
+      {% set manifest = selected.manifest %}
+      <section class="run-header" aria-labelledby="run-title">
+        <div>
+          <div class="status-row">
+            <span class="status status-{{ manifest.status }}">{{ manifest.status | upper }}</span>
+            <span class="run-id">{{ manifest.run_id }}</span>
+          </div>
+          <h2 id="run-title">{{ manifest.dataset_name | replace('_', ' ') | title }}</h2>
+          <p>{{ manifest.source_file }} compared with {{ manifest.baseline_file }}</p>
+        </div>
+        <nav class="run-picker" aria-label="Run history">
+          <label for="run-select">Run history</label>
+          <select id="run-select" onchange="window.location='/?run=' + this.value">
+            {% for run in runs %}
+            <option value="{{ run.run_id }}" {% if run.run_id == manifest.run_id %}selected{% endif %}>
+              {{ run.created_at[:16] | replace('T', ' ') }} | {{ run.dataset_name }} | {{ run.status }}
+            </option>
+            {% endfor %}
+          </select>
+        </nav>
+      </section>
+
+      <section class="metrics" aria-label="Run summary metrics">
+        <article class="metric health-metric">
+          <p>Health score</p>
+          <strong>{{ manifest.health_score }}</strong>
+          <div class="score-track" aria-label="Health score {{ manifest.health_score }} out of 100">
+            <span style="width: {{ manifest.health_score }}%"></span>
+          </div>
+        </article>
+        <article class="metric">
+          <p>Accepted rows</p>
+          <strong>{{ manifest.accepted_rows }}</strong>
+          <span>{{ ((manifest.accepted_rows / manifest.source_rows) * 100) | round(1) if manifest.source_rows else 0 }}% of batch</span>
+        </article>
+        <article class="metric warning-metric">
+          <p>Quarantined</p>
+          <strong>{{ manifest.quarantined_rows }}</strong>
+          <span>isolated from consumers</span>
+        </article>
+        <article class="metric drift-metric">
+          <p>Drift signals</p>
+          <strong>{{ manifest.drift_signals }}</strong>
+          <span>{{ manifest.failed_checks }} failed checks</span>
+        </article>
+      </section>
+
+      <section class="flow-section" aria-labelledby="flow-title">
+        <div class="section-heading compact-heading">
+          <div>
+            <p class="eyebrow">PIPELINE TRACE</p>
+            <h2 id="flow-title">What happened to this batch</h2>
+          </div>
+        </div>
+        <div class="flow-grid">
+          <div class="flow-stage"><span>01</span><strong>Ingested</strong><small>{{ manifest.source_rows }} rows</small></div>
+          <div class="flow-connector">&gt;</div>
+          <div class="flow-stage"><span>02</span><strong>Profiled</strong><small>{{ selected.current_profile.column_count }} columns</small></div>
+          <div class="flow-connector">&gt;</div>
+          <div class="flow-stage"><span>03</span><strong>Validated</strong><small>{{ selected.passed_checks }}/{{ selected.total_checks }} checks passed</small></div>
+          <div class="flow-connector">&gt;</div>
+          <div class="flow-stage flow-good"><span>04A</span><strong>Accepted</strong><small>{{ manifest.accepted_rows }} rows</small></div>
+          <div class="flow-stage flow-bad"><span>04B</span><strong>Quarantined</strong><small>{{ manifest.quarantined_rows }} rows</small></div>
+        </div>
+      </section>
+
+      <section class="investigation" aria-labelledby="investigation-title">
+        <div class="investigation-head">
+          <div>
+            <p class="eyebrow">INCIDENT INVESTIGATOR</p>
+            <h2 id="investigation-title">{{ selected.investigation.risk }} risk</h2>
+          </div>
+          <span class="mode">{{ selected.investigation.mode }} evidence</span>
+        </div>
+        <p class="investigation-headline">{{ selected.investigation.headline }}</p>
+        {% if selected.investigation.agent_narrative %}<p class="agent-narrative">{{ selected.investigation.agent_narrative }}</p>{% endif %}
+        <div class="investigation-columns">
+          <div>
+            <h3>Evidence</h3>
+            <ol>
+              {% for item in selected.investigation.evidence %}<li>{{ item }}</li>{% endfor %}
+              {% if not selected.investigation.evidence %}<li>No contract violations or material drift signals.</li>{% endif %}
+            </ol>
+          </div>
+          <div>
+            <h3>Recommended actions</h3>
+            <ol>
+              {% for item in selected.investigation.recommended_actions %}<li>{{ item }}</li>{% endfor %}
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="two-column" aria-label="Checks and drift">
+        <div class="plain-section">
+          <div class="section-heading compact-heading">
+            <div><p class="eyebrow">CONTRACT</p><h2>Failed checks</h2></div>
+            <span class="count">{{ selected.failed_checks | length }}</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Severity</th><th>Check</th><th>Column</th><th>Finding</th></tr></thead>
+              <tbody>
+                {% for check in selected.failed_checks %}
+                <tr>
+                  <td><span class="severity severity-{{ check.severity }}">{{ check.severity }}</span></td>
+                  <td>{{ check.check | replace('_', ' ') }}</td>
+                  <td><code>{{ check.column or 'dataset' }}</code></td>
+                  <td>{{ check.message }}</td>
+                </tr>
+                {% else %}<tr><td colspan="4" class="empty">All contract checks passed.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="plain-section">
+          <div class="section-heading compact-heading">
+            <div><p class="eyebrow">BASELINE COMPARISON</p><h2>Drift signals</h2></div>
+            <span class="count">{{ selected.drift | length }}</span>
+          </div>
+          <div class="signal-list">
+            {% for signal in selected.drift %}
+            <article class="signal">
+              <div><span class="severity severity-{{ signal.severity }}">{{ signal.severity }}</span><strong>{{ signal.signal | replace('_', ' ') }}</strong></div>
+              <p>{{ signal.message }}</p>
+              <small>score {{ signal.score }} / threshold {{ signal.threshold }}</small>
+            </article>
+            {% else %}<p class="empty">No material drift detected.</p>{% endfor %}
+          </div>
+        </div>
+      </section>
+
+      <section class="plain-section" aria-labelledby="quarantine-title">
+        <div class="section-heading compact-heading">
+          <div><p class="eyebrow">ROW-LEVEL EVIDENCE</p><h2 id="quarantine-title">Quarantine preview</h2></div>
+          <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.quarantined }}">Download quarantine</a>
+        </div>
+        <div class="table-wrap wide-table">
+          <table>
+            {% if selected.quarantine_preview %}
+            <thead><tr>{% for key in selected.quarantine_preview[0].keys() %}<th>{{ key }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in selected.quarantine_preview %}<tr>{% for value in row.values() %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+            {% else %}<tbody><tr><td class="empty">No rows were quarantined.</td></tr></tbody>{% endif %}
+          </table>
+        </div>
+      </section>
+
+      <section class="two-column lower-grid" aria-label="Schema profile and contract">
+        <div class="plain-section">
+          <div class="section-heading compact-heading"><div><p class="eyebrow">PROFILE</p><h2>Detected schema</h2></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Column</th><th>Type</th><th>Nulls</th><th>Unique</th><th>PII hint</th></tr></thead>
+              <tbody>{% for column in selected.current_profile.columns %}
+                <tr><td><code>{{ column.name }}</code></td><td>{{ column.dtype }}</td><td>{{ (column.null_rate * 100) | round(1) }}%</td><td>{{ column.unique_count }}</td><td>{{ column.pii_hint or '-' }}</td></tr>
+              {% endfor %}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="plain-section">
+          <div class="section-heading compact-heading">
+            <div><p class="eyebrow">CONTRACT AS CODE</p><h2>Generated YAML</h2></div>
+            <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.contract }}">Download contract</a>
+          </div>
+          <details>
+            <summary>View complete contract</summary>
+            <pre>{{ selected.contract_yaml }}</pre>
+          </details>
+        </div>
+      </section>
+      {% endif %}
+    </main>
+
+    <footer>
+      <p>PipeProof stores every run as reproducible local artifacts. No uploaded data is sent to an LLM.</p>
+      {% if selected %}<a href="/artifacts/{{ selected.manifest.run_id }}/{{ selected.manifest.artifacts.accepted }}">Download accepted dataset</a>{% endif %}
+    </footer>
+    <script>
+      document.getElementById('upload-form').addEventListener('submit', function () {
+        const button = document.getElementById('analyze-button');
+        button.disabled = true;
+        button.textContent = 'Analyzing batch...';
+      });
+    </script>
+  </body>
+</html>

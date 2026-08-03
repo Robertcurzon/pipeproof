@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: pipeproof
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn web.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PIPEPROOF_DATA_DIR
+        value: /tmp/pipeproof

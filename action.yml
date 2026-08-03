@@ -1,0 +1,27 @@
+name: PipeProof Data Contract Check
+description: Validate a current data batch against a baseline and quarantine invalid rows.
+inputs:
+  current:
+    description: Path to the current CSV, Parquet, JSON, or JSONL batch.
+    required: true
+  baseline:
+    description: Path to the accepted baseline batch.
+    required: true
+  dataset-name:
+    description: Logical dataset name included in reports.
+    required: false
+    default: incoming_batch
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - shell: bash
+      run: pip install "${{ github.action_path }}"
+    - shell: bash
+      run: >-
+        pipeproof check "${{ inputs.current }}"
+        --baseline "${{ inputs.baseline }}"
+        --name "${{ inputs.dataset-name }}"
+        --output pipeproof-artifacts
