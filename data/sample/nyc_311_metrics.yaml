@@ -1,0 +1,58 @@
+name: nyc_311_operations
+version: "1.0"
+source:
+  table: accepted
+  time_column: created_date
+dimensions:
+  - agency
+  - complaint_type
+  - borough
+  - status
+  - channel
+metrics:
+  - name: service_requests
+    label: Service Requests
+    description: Accepted service-request records.
+    type: count
+    tests:
+      - test: minimum
+        value: 1
+        severity: error
+  - name: closed_requests
+    label: Closed Requests
+    description: Requests with a Closed status.
+    type: count
+    filters:
+      - column: status
+        operator: eq
+        value: Closed
+    tests:
+      - test: non_negative
+  - name: average_resolution_hours
+    label: Average Resolution Hours
+    description: Mean resolution time for accepted requests.
+    type: average
+    column: resolution_hours
+    format: duration_hours
+    tests:
+      - test: non_negative
+  - name: slow_resolutions
+    label: Slow Resolutions
+    description: Requests requiring more than 24 hours.
+    type: count
+    filters:
+      - column: resolution_hours
+        operator: gt
+        value: 24
+  - name: closure_rate
+    label: Closure Rate
+    description: Closed requests divided by accepted service requests.
+    type: ratio
+    numerator: closed_requests
+    denominator: service_requests
+    format: percent
+    tests:
+      - test: minimum
+        value: 0
+      - test: maximum
+        value: 1

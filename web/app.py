@@ -18,6 +18,14 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
+from pipeproof.metrics import (
+    DIALECTS,
+    MetricCatalog,
+    compile_metrics_sql,
+    demo_metric_catalog,
+    load_metric_catalog,
+    metric_lineage,
+)
 from pipeproof.pipeline import run_pipeline
 from pipeproof.store import ArtifactStore
 
@@ -41,6 +49,8 @@ def ensure_demo() -> None:
     run_pipeline(
         PROJECT_ROOT / "data/sample/nyc_311_incident.csv",
         PROJECT_ROOT / "data/sample/nyc_311_baseline.csv",
+        metric_catalog=demo_metric_catalog(),
+        metric_group_by=["borough"],
         store_root=STORE_ROOT,
         dataset_name="nyc_311_service_requests",
     )
@@ -70,10 +80,16 @@ async def homepage(request: Request) -> Response:
     return templates.TemplateResponse(request, "index.html", model)
 
 
-async def _save_upload(upload: UploadFile, prefix: str) -> Path:
+async def _save_upload(
+    upload: UploadFile,
+    prefix: str,
+    *,
+    allowed_suffixes: set[str] | None = None,
+) -> Path:
     filename = Path(upload.filename or "upload.csv").name
     suffix = Path(filename).suffix.lower()
-    if suffix not in ALLOWED_SUFFIXES:
+    effective_suffixes = allowed_suffixes or ALLOWED_SUFFIXES
+    if suffix not in effective_suffixes:
         raise HTTPException(400, f"Unsupported upload type: {suffix}")
     content = await upload.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
@@ -90,24 +106,45 @@ async def analyze(request: Request) -> Response:
     form = await request.form()
     current = form.get("current")
     baseline = form.get("baseline")
+    metric_spec = form.get("metric_spec")
     if not isinstance(current, UploadFile) or not current.filename:
         raise HTTPException(400, "Choose a current batch to analyze.")
     current_path = await _save_upload(current, "current")
     baseline_path = None
+    metric_path = None
     if isinstance(baseline, UploadFile) and baseline.filename:
         baseline_path = await _save_upload(baseline, "baseline")
-    dataset_name = str(form.get("dataset_name") or "uploaded_batch").strip()[:80]
-    try:
-        result = run_pipeline(
-            current_path,
-            baseline_path,
-            store_root=STORE_ROOT,
-            dataset_name=dataset_name,
+    if isinstance(metric_spec, UploadFile) and metric_spec.filename:
+        metric_path = await _save_upload(
+            metric_spec,
+            "metrics",
+            allowed_suffixes={".yaml", ".yml"},
         )
+    dataset_name = str(form.get("dataset_name") or "uploaded_batch").strip()[:80]
+    group_by = [
+        item.strip()
+        for item in str(form.get("metric_group_by") or "").split(",")
+        if item.strip()
+    ]
+    try:
+        try:
+            metric_catalog = load_metric_catalog(metric_path) if metric_path else None
+            result = run_pipeline(
+                current_path,
+                baseline_path,
+                metric_catalog=metric_catalog,
+                metric_group_by=group_by,
+                store_root=STORE_ROOT,
+                dataset_name=dataset_name,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
     finally:
         current_path.unlink(missing_ok=True)
         if baseline_path:
             baseline_path.unlink(missing_ok=True)
+        if metric_path:
+            metric_path.unlink(missing_ok=True)
     return RedirectResponse(f"/?run={result.run_id}", status_code=303)
 
 
@@ -125,6 +162,43 @@ async def api_run(request: Request) -> Response:
         return JSONResponse(store.load_run(request.path_params["run_id"]))
     except FileNotFoundError as exc:
         raise HTTPException(404, "Run not found") from exc
+
+
+async def api_run_metrics(request: Request) -> Response:
+    """Return governed metric outputs for one reliability run."""
+
+    try:
+        run = store.load_run(request.path_params["run_id"])
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "Run not found") from exc
+    if run["metrics"] is None:
+        raise HTTPException(404, "This run has no metric catalog")
+    return JSONResponse(run["metrics"])
+
+
+async def api_compile_metrics(request: Request) -> Response:
+    """Validate a JSON metric catalog and compile warehouse SQL without executing it."""
+
+    try:
+        payload = await request.json()
+        catalog_payload = payload.get("catalog", payload)
+        catalog = MetricCatalog.from_dict(catalog_payload)
+        dialect = str(payload.get("dialect", "duckdb"))
+        group_by = [str(value) for value in payload.get("group_by", [])]
+        if dialect not in DIALECTS:
+            raise ValueError(f"Unsupported SQL dialect: {dialect}")
+        lineage, mermaid = metric_lineage(catalog)
+        return JSONResponse(
+            {
+                "catalog": catalog.name,
+                "dialect": dialect,
+                "sql": compile_metrics_sql(catalog, dialect=dialect, group_by=group_by),
+                "lineage": lineage,
+                "lineage_mermaid": mermaid,
+            }
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 async def download_artifact(request: Request) -> Response:
@@ -150,6 +224,8 @@ routes = [
     Route("/analyze", analyze, methods=["POST"]),
     Route("/api/runs", api_runs),
     Route("/api/runs/{run_id:str}", api_run),
+    Route("/api/runs/{run_id:str}/metrics", api_run_metrics),
+    Route("/api/metrics/compile", api_compile_metrics, methods=["POST"]),
     Route("/artifacts/{run_id:str}/{filename:str}", download_artifact),
     Route("/health", health),
     Mount("/static", app=StaticFiles(directory=PROJECT_ROOT / "web/static"), name="static"),

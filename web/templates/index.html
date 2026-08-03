@@ -26,7 +26,7 @@
             <p class="eyebrow">NEW RUN</p>
             <h2 id="upload-title">Analyze an incoming batch</h2>
           </div>
-          <p class="section-copy">CSV, Parquet, JSON, or JSONL. Add a baseline to measure drift; without one, PipeProof creates the initial contract.</p>
+          <p class="section-copy">Add a baseline to measure drift and an optional MetricFoundry YAML catalog to compute governed KPIs from accepted rows.</p>
         </div>
         <form class="upload-form" method="post" action="/analyze" enctype="multipart/form-data" id="upload-form">
           <label>
@@ -40,6 +40,14 @@
           <label>
             <span>Current batch</span>
             <input type="file" name="current" accept=".csv,.parquet,.json,.jsonl" required>
+          </label>
+          <label>
+            <span>Metric catalog <small>optional YAML</small></span>
+            <input type="file" name="metric_spec" accept=".yaml,.yml">
+          </label>
+          <label>
+            <span>Metric group by <small>comma-separated</small></span>
+            <input name="metric_group_by" placeholder="region, channel">
           </label>
           <button type="submit" id="analyze-button">Run reliability check</button>
         </form>
@@ -91,6 +99,11 @@
           <strong>{{ manifest.drift_signals }}</strong>
           <span>{{ manifest.failed_checks }} failed checks</span>
         </article>
+        <article class="metric metrics-metric">
+          <p>Governed metrics</p>
+          <strong>{{ manifest.metrics_count }}</strong>
+          <span>{{ manifest.failed_metric_tests }} failed assertions</span>
+        </article>
       </section>
 
       <section class="flow-section" aria-labelledby="flow-title">
@@ -109,8 +122,49 @@
           <div class="flow-connector">&gt;</div>
           <div class="flow-stage flow-good"><span>04A</span><strong>Accepted</strong><small>{{ manifest.accepted_rows }} rows</small></div>
           <div class="flow-stage flow-bad"><span>04B</span><strong>Quarantined</strong><small>{{ manifest.quarantined_rows }} rows</small></div>
+          <div class="flow-connector">&gt;</div>
+          <div class="flow-stage flow-metric"><span>05</span><strong>Governed metrics</strong><small>{{ manifest.metrics_count }} definitions</small></div>
         </div>
       </section>
+
+      {% if selected.metrics %}
+      <section class="metric-foundry" aria-labelledby="metric-foundry-title">
+        <div class="section-heading compact-heading">
+          <div><p class="eyebrow">METRICFOUNDRY</p><h2 id="metric-foundry-title">{{ selected.metrics.catalog.name | replace('_', ' ') | title }}</h2></div>
+          <div class="metric-downloads">
+            <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.metrics }}">Metric values</a>
+            <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.metric_catalog }}">YAML catalog</a>
+            <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.metrics_sql }}">Compiled SQL</a>
+            <a class="download" href="/artifacts/{{ manifest.run_id }}/{{ manifest.artifacts.metrics_lineage }}">Lineage JSON</a>
+          </div>
+        </div>
+        <p class="metric-intro">Version {{ selected.metrics.catalog.version }} computed {{ selected.metrics.metric_count }} governed metrics from accepted rows{% if selected.metrics.group_by %}, grouped by {{ selected.metrics.group_by | join(', ') }}{% endif %}. The same definitions compile to DuckDB, PostgreSQL, and BigQuery.</p>
+        <div class="table-wrap metric-values">
+          <table>
+            {% if selected.metrics['values'] %}
+            <thead><tr>{% for key in selected.metrics['values'][0].keys() %}<th>{{ key | replace('_', ' ') }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in selected.metrics['values'] %}<tr>{% for key, value in row.items() %}<td>{{ value if value is not none else '-' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+            {% else %}<tbody><tr><td class="empty">No accepted rows were available for grouped metric output.</td></tr></tbody>{% endif %}
+          </table>
+        </div>
+        <div class="metric-detail-grid">
+          <div>
+            <div class="section-heading compact-heading"><div><p class="eyebrow">ASSERTIONS</p><h3>Metric tests</h3></div><span class="count">{{ selected.metrics.failed_tests }}</span></div>
+            <div class="metric-tests">
+              {% for test in selected.metrics.tests %}
+              <p><span class="test-state test-{{ 'pass' if test.passed else 'fail' }}">{{ 'PASS' if test.passed else 'FAIL' }}</span><strong>{{ test.metric | replace('_', ' ') }}</strong><span>{{ test.test | replace('_', ' ') }} / observed {{ test.observed if test.observed is not none else '-' }} / {{ test.expected }}</span></p>
+              {% else %}<p class="empty">No metric assertions are defined.</p>{% endfor %}
+            </div>
+          </div>
+          <div>
+            <div class="section-heading compact-heading"><div><p class="eyebrow">PORTABLE SQL</p><h3>Warehouse compilers</h3></div></div>
+            {% for dialect, sql in selected.metrics.sql.items() %}
+            <details class="sql-detail"><summary>{{ dialect | upper }}</summary><pre>{{ sql }}</pre></details>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+      {% endif %}
 
       <section class="investigation" aria-labelledby="investigation-title">
         <div class="investigation-head">
@@ -220,7 +274,7 @@
     </main>
 
     <footer>
-      <p>PipeProof stores every run as reproducible local artifacts. No uploaded data is sent to an LLM.</p>
+      <p>PipeProof stores reliability and semantic-metric evidence together. No uploaded rows are sent to an LLM.</p>
       {% if selected %}<a href="/artifacts/{{ selected.manifest.run_id }}/{{ selected.manifest.artifacts.accepted }}">Download accepted dataset</a>{% endif %}
     </footer>
     <script>

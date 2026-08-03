@@ -12,6 +12,7 @@ from pipeproof.contracts import generate_contract
 from pipeproof.drift import detect_drift
 from pipeproof.investigator import investigate
 from pipeproof.io import load_table
+from pipeproof.metrics import MetricCatalog, MetricRun, execute_metrics
 from pipeproof.models import DataContract, DriftSignal
 from pipeproof.profiler import profile_batch
 from pipeproof.store import ArtifactStore
@@ -28,6 +29,8 @@ class PipelineRun:
     accepted_rows: int
     quarantined_rows: int
     drift_signals: int
+    metrics_count: int
+    failed_metric_tests: int
     artifacts: dict[str, str]
     investigation: dict[str, Any]
 
@@ -50,6 +53,8 @@ def run_pipeline(
     baseline_path: str | Path | None = None,
     *,
     contract: DataContract | None = None,
+    metric_catalog: MetricCatalog | None = None,
+    metric_group_by: list[str] | None = None,
     store_root: str | Path = "data/runtime/runs",
     dataset_name: str = "incoming_batch",
 ) -> PipelineRun:
@@ -65,6 +70,25 @@ def run_pipeline(
     accepted, quarantined, validation = validate_frame(current_frame, active_contract)
     drift = detect_drift(baseline_profile, current_profile, active_contract)
     investigation = investigate(validation, drift)
+    metric_run: MetricRun | None = None
+    metric_error_failures = 0
+    metric_warning_failures = 0
+    if metric_catalog is not None:
+        metric_run = execute_metrics(accepted, metric_catalog, group_by=metric_group_by)
+        metric_error_failures = sum(
+            not item.passed and item.severity == "error" for item in metric_run.tests
+        )
+        metric_warning_failures = sum(
+            not item.passed and item.severity == "warning" for item in metric_run.tests
+        )
+        failed_metrics = [item for item in metric_run.tests if not item.passed]
+        if failed_metrics:
+            investigation["evidence"].append(
+                f"{len(failed_metrics)} governed metric assertion(s) failed."
+            )
+            investigation["recommended_actions"].append(
+                "Review the metric catalog, accepted-row population, and failed metric thresholds before publishing downstream KPIs."
+            )
 
     failed_errors = sum(
         not check.passed and check.severity == "error" for check in validation.checks
@@ -73,10 +97,16 @@ def run_pipeline(
         not check.passed and check.severity == "warning" for check in validation.checks
     )
     score = _health_score(validation.status, failed_errors, failed_warnings, drift)
+    score = max(0, score - metric_error_failures * 6 - metric_warning_failures * 2)
     created_at = datetime.now(UTC)
     run_id = f"{created_at:%Y%m%dT%H%M%SZ}-{secrets.token_hex(3)}"
     status = validation.status
     if status != "failed" and drift:
+        status = "degraded"
+    if metric_error_failures:
+        status = "failed"
+        score = min(score, 69)
+    elif status != "failed" and metric_warning_failures:
         status = "degraded"
     manifest = {
         "run_id": run_id,
@@ -91,6 +121,9 @@ def run_pipeline(
         "quarantined_rows": len(quarantined),
         "failed_checks": failed_errors + failed_warnings,
         "drift_signals": len(drift),
+        "metrics_count": len(metric_catalog.metrics) if metric_catalog else 0,
+        "metric_rows": len(metric_run.values) if metric_run else 0,
+        "failed_metric_tests": metric_error_failures + metric_warning_failures,
     }
     artifacts = ArtifactStore(store_root).save_run(
         run_id,
@@ -103,6 +136,7 @@ def run_pipeline(
         investigation,
         accepted,
         quarantined,
+        metric_run,
     )
     return PipelineRun(
         run_id=run_id,
@@ -111,6 +145,8 @@ def run_pipeline(
         accepted_rows=len(accepted),
         quarantined_rows=len(quarantined),
         drift_signals=len(drift),
+        metrics_count=len(metric_catalog.metrics) if metric_catalog else 0,
+        failed_metric_tests=metric_error_failures + metric_warning_failures,
         artifacts=artifacts,
         investigation=investigation,
     )

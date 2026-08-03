@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from pipeproof.contracts import save_contract
+from pipeproof.metrics import MetricRun, metric_catalog_to_yaml
 from pipeproof.models import BatchProfile, DataContract, DriftSignal, ValidationSummary
 
 
@@ -42,6 +43,7 @@ class ArtifactStore:
         investigation: dict[str, Any],
         accepted: pd.DataFrame,
         quarantined: pd.DataFrame,
+        metrics: MetricRun | None = None,
     ) -> dict[str, str]:
         """Persist all artifacts produced by one pipeline run."""
 
@@ -58,13 +60,43 @@ class ArtifactStore:
             "drift.json": [asdict(item) for item in drift],
             "investigation.json": investigation,
         }
+        artifacts = {
+            "accepted": accepted_name,
+            "quarantined": quarantine_name,
+            "contract": "contract.yaml",
+        }
+        if metrics is not None:
+            metrics.values.to_csv(run_dir / "metrics.csv", index=False)
+            (run_dir / "metrics.json").write_text(
+                json.dumps(metrics.summary(), indent=2, default=str), encoding="utf-8"
+            )
+            sql_bundle = "\n\n".join(
+                f"-- {dialect.upper()}\n{query}" for dialect, query in metrics.sql.items()
+            )
+            (run_dir / "metrics.sql").write_text(sql_bundle + "\n", encoding="utf-8")
+            (run_dir / "metrics_lineage.json").write_text(
+                json.dumps(metrics.lineage, indent=2), encoding="utf-8"
+            )
+            (run_dir / "metrics_lineage.mmd").write_text(
+                metrics.lineage_mermaid, encoding="utf-8"
+            )
+            (run_dir / "metric_catalog.yaml").write_text(
+                metric_catalog_to_yaml(metrics.catalog), encoding="utf-8"
+            )
+            artifacts.update(
+                {
+                    "metrics": "metrics.csv",
+                    "metrics_report": "metrics.json",
+                    "metrics_sql": "metrics.sql",
+                    "metrics_lineage": "metrics_lineage.json",
+                    "metrics_mermaid": "metrics_lineage.mmd",
+                    "metric_catalog": "metric_catalog.yaml",
+                }
+            )
+
         manifest = {
             **manifest,
-            "artifacts": {
-                "accepted": accepted_name,
-                "quarantined": quarantine_name,
-                "contract": "contract.yaml",
-            },
+            "artifacts": artifacts,
         }
         payloads["manifest.json"] = manifest
         for filename, payload in payloads.items():
@@ -103,6 +135,16 @@ class ArtifactStore:
             for name in names
         }
         result["contract_yaml"] = (run_dir / "contract.yaml").read_text(encoding="utf-8")
+        metrics_path = run_dir / "metrics.json"
+        result["metrics"] = (
+            json.loads(metrics_path.read_text(encoding="utf-8"))
+            if metrics_path.exists()
+            else None
+        )
+        catalog_path = run_dir / "metric_catalog.yaml"
+        result["metric_catalog_yaml"] = (
+            catalog_path.read_text(encoding="utf-8") if catalog_path.exists() else None
+        )
         quarantine_path = next(run_dir.glob("quarantined.*"), None)
         if quarantine_path and quarantine_path.suffix == ".parquet":
             quarantine = pd.read_parquet(quarantine_path)

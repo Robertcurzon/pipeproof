@@ -6,7 +6,7 @@
 [![Apache Arrow](https://img.shields.io/badge/Apache%20Arrow-Parquet-EE3F24?logo=apache&logoColor=white)](https://arrow.apache.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**PipeProof** is a contract-first data intake and pipeline reliability workbench. It turns changing CSV, Parquet, JSON, and REST feeds into validated datasets with explicit contracts, row-level quarantine evidence, baseline drift detection, and reproducible run artifacts.
+**PipeProof** is a contract-first data intake, reliability, and semantic-metrics workbench. It turns changing CSV, Parquet, JSON, and REST feeds into validated datasets with explicit contracts, row-level quarantine evidence, baseline drift detection, governed KPI definitions, and reproducible run artifacts.
 
 It is built for data engineers, analytics engineers, consultants, and SaaS teams that regularly receive customer, vendor, or operational data they do not fully control.
 
@@ -23,6 +23,9 @@ PipeProof places a quality gate between incoming data and downstream consumers:
 - Splits every batch into accepted and quarantined outputs.
 - Records row-level failure reasons instead of silently dropping bad records.
 - Produces a bounded incident investigation based only on observed evidence.
+- Defines governed metrics in versioned YAML and evaluates them only against accepted rows.
+- Compiles the same metric catalog to DuckDB, PostgreSQL, and BigQuery SQL.
+- Tests metric outputs and emits portable source-to-metric lineage.
 - Works through an installable CLI, JSON API, browser interface, or GitHub Action.
 - Stores clean data in Parquet when Apache Arrow is available, with CSV fallback.
 
@@ -43,9 +46,13 @@ flowchart LR
     F --> J["Run Evidence"]
     G --> J
     J --> K["Incident Investigator"]
+    H --> M["MetricFoundry YAML"]
+    M --> N["Metric Tests + SQL Compilers"]
+    N --> O["Values + Lineage"]
     H --> L["CLI / API / Web App"]
     I --> L
     K --> L
+    O --> L
 
     classDef source fill:#152536,stroke:#53c7df,color:#edf2f7;
     classDef engine fill:#173026,stroke:#51d18a,color:#edf2f7;
@@ -53,8 +60,9 @@ flowchart LR
     classDef incident fill:#3a2023,stroke:#ff786f,color:#edf2f7;
     class A,B,C source;
     class D,E,F,G engine;
-    class H,I,J evidence;
+    class H,I,J,O evidence;
     class K,L incident;
+    class M,N engine;
 ```
 
 The validation package is independent from the web application. The CLI, API, browser UI, tests, and GitHub Action all call the same pipeline service.
@@ -70,7 +78,7 @@ pip install -r requirements.txt
 uvicorn web.app:app --reload
 ```
 
-Open [http://localhost:8000](http://localhost:8000). The first request creates a complete incident replay, so the dashboard is useful before any files are uploaded.
+Open [http://localhost:8000](http://localhost:8000). The first request creates a complete incident replay with governed 311 metrics grouped by borough, so the dashboard is useful before any files are uploaded.
 
 Claude is optional. Without `ANTHROPIC_API_KEY`, PipeProof uses the same deterministic evidence and remediation engine shown in the public demo. To enable narrative enrichment, copy `.env.example` to `.env` and add the key before starting the app.
 
@@ -114,7 +122,9 @@ Run a reliability check:
 ```bash
 pipeproof check data/sample/nyc_311_incident.csv \
   --baseline data/sample/nyc_311_baseline.csv \
-  --name nyc_311_service_requests
+  --name nyc_311_service_requests \
+  --metrics data/sample/nyc_311_metrics.yaml \
+  --group-by borough
 ```
 
 Replay the bundled incident:
@@ -129,6 +139,19 @@ Fetch current public data:
 pipeproof fetch-nyc-311 --days 7 --limit 2000
 ```
 
+Validate and compile a MetricFoundry catalog independently:
+
+```bash
+pipeproof metrics validate data/sample/nyc_311_metrics.yaml \
+  --data data/sample/nyc_311_baseline.csv
+
+pipeproof metrics compile data/sample/nyc_311_metrics.yaml \
+  --dialect bigquery \
+  --group-by borough
+```
+
+See [the MetricFoundry catalog guide](docs/metric-catalogs.md) for metric types, filters, assertions, SQL compilation, and lineage.
+
 The `check` command exits with status `1` when blocking checks fail, making it suitable for CI quality gates.
 
 ## GitHub Action
@@ -141,6 +164,8 @@ PipeProof includes a composite action that can block publication when an incomin
     baseline: data/accepted/orders.csv
     current: data/incoming/orders.csv
     dataset-name: customer_orders
+    metric-catalog: metrics/orders.yaml
+    metric-group-by: region,channel
 ```
 
 Run artifacts include:
@@ -155,7 +180,13 @@ data/runtime/runs/<run-id>/
 ├── drift.json
 ├── investigation.json
 ├── accepted.parquet
-└── quarantined.parquet
+├── quarantined.parquet
+├── metric_catalog.yaml
+├── metrics.csv
+├── metrics.json
+├── metrics.sql
+├── metrics_lineage.json
+└── metrics_lineage.mmd
 ```
 
 ## JSON API
@@ -165,6 +196,8 @@ data/runtime/runs/<run-id>/
 | `GET /health` | Deployment health check |
 | `GET /api/runs` | Run-history manifests |
 | `GET /api/runs/{run_id}` | Complete evidence for one run |
+| `GET /api/runs/{run_id}/metrics` | Governed metric values, tests, SQL, and lineage |
+| `POST /api/metrics/compile` | Validate a JSON catalog and compile warehouse SQL |
 | `POST /analyze` | Browser multipart upload workflow |
 | `GET /artifacts/{run_id}/{filename}` | Whitelisted artifact download |
 
@@ -173,6 +206,12 @@ data/runtime/runs/<run-id>/
 The deterministic investigator is the system of record. It ranks blocking checks and drift signals, reports the exact evidence, and recommends bounded next actions.
 
 When Claude is enabled, only the structured incident evidence is sent for narrative enrichment. Raw uploaded rows are never included. The model is explicitly prohibited from changing measurements or inventing root causes, and the evidence remains visible beside the narrative.
+
+## MetricFoundry
+
+MetricFoundry is deliberately downstream of contract validation. Metrics run against the accepted dataframe, so malformed, out-of-range, or quarantined rows cannot silently contaminate published KPIs.
+
+Catalogs support counts, distinct counts, sums, averages, minima, maxima, filtered measures, and ratios that reference other governed metrics. Post-computation assertions can warn or fail a reliability run. Every metric run stores the catalog version, calculated values, three warehouse SQL variants, assertion evidence, and a small portable lineage graph.
 
 ## Public Deployment
 
@@ -196,10 +235,10 @@ CI tests Python 3.11 and 3.12 on every push and pull request.
 
 ## Roadmap
 
-- Editable contract approval and semantic versioning workflow.
+- Editable contract and metric-catalog approval workflows.
 - dlt adapters for incremental REST, SQL, and cloud-file ingestion.
 - Dagster assets and blocking asset checks.
-- dbt-duckdb transformation examples and downstream impact graph.
+- dbt adapter examples and downstream impact propagation from metric lineage.
 - S3-compatible artifact storage and signed downloads.
 - Slack and GitHub incident delivery with explicit human approval.
 
