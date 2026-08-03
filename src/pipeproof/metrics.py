@@ -11,7 +11,6 @@ from typing import Any
 
 import pandas as pd
 
-
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 METRIC_TYPES = {"count", "count_distinct", "sum", "average", "minimum", "maximum", "ratio"}
 FILTER_OPERATORS = {"eq", "ne", "in", "not_in", "gt", "gte", "lt", "lte", "is_null", "not_null"}
@@ -88,7 +87,7 @@ class MetricCatalog:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "MetricCatalog":
+    def from_dict(cls, payload: dict[str, Any]) -> MetricCatalog:
         """Parse a catalog from a mapping and validate its structure."""
 
         source = payload.get("source", {})

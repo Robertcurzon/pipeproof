@@ -29,7 +29,6 @@ from pipeproof.metrics import (
 from pipeproof.pipeline import run_pipeline
 from pipeproof.store import ArtifactStore
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_ROOT = Path(os.getenv("PIPEPROOF_DATA_DIR", PROJECT_ROOT / "data/runtime"))
 STORE_ROOT = RUNTIME_ROOT / "runs"

@@ -80,7 +80,7 @@ class DataContract:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "DataContract":
+    def from_dict(cls, payload: dict[str, Any]) -> DataContract:
         """Build a contract from a dictionary."""
 
         columns = [ColumnContract(**item) for item in payload.pop("columns")]

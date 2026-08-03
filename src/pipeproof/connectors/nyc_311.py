@@ -10,7 +10,6 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
-
 ENDPOINT = "https://data.cityofnewyork.us/resource/erm2-nwe9.json"
 DEFAULT_COLUMNS = [
     "unique_key",

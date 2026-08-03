@@ -6,7 +6,6 @@ from pipeproof.metrics import demo_metric_catalog
 from pipeproof.pipeline import run_pipeline
 from pipeproof.store import ArtifactStore
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

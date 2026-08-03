@@ -12,7 +12,6 @@ import pandas as pd
 
 from pipeproof.models import BatchProfile, ColumnProfile
 
-
 PII_PATTERNS = {
     "email": re.compile(r"(^|_)(email|e_mail)($|_)"),
     "phone": re.compile(r"(^|_)(phone|mobile|telephone)($|_)"),

@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 SUPPORTED_EXTENSIONS = {".csv", ".parquet", ".json", ".jsonl"}
 
 

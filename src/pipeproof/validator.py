@@ -210,7 +210,9 @@ def validate_frame(
             pattern = re.compile(rule.pattern)
             strings = working[name].astype("string")
             invalid_pattern = strings.notna() & ~strings.map(
-                lambda value: bool(pattern.match(str(value))) if pd.notna(value) else True
+                lambda value, compiled=pattern: (
+                    bool(compiled.match(str(value))) if pd.notna(value) else True
+                )
             )
             checks.append(
                 CheckResult(

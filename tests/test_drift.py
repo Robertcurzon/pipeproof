@@ -7,7 +7,6 @@ from pipeproof.drift import detect_drift
 from pipeproof.io import load_table
 from pipeproof.profiler import profile_batch
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
